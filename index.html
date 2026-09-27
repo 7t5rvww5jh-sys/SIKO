@@ -97,7 +97,36 @@ select{background:#29292c;color:#fff;border:1px solid #444;border-radius:10px;pa
   <div class="row" style="margin-top:12px">
     <button id="testVoice">🔊 声を試す</button>
   </div>
-  <div class="small">※女性音声の有無・声質はiPhoneに入っている音声によって異なります。「女性寄り」は音程・速度を自然な範囲で調整するプリセットです。</div>
+
+  <hr style="border:0;border-top:1px solid #333;margin:16px 0">
+
+  <div class="voice"><b>リズム音</b></div>
+  <div class="row" style="margin-top:10px">
+    <label>音の種類</label>
+    <select id="soundMode">
+      <option value="voice">「シコ」だけ</option>
+      <option value="click">電子音だけ</option>
+      <option value="both">「シコ」＋電子音</option>
+    </select>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <label>電子音</label>
+    <select id="clickType">
+      <option value="high">高いクリック</option>
+      <option value="low">低いクリック</option>
+      <option value="beep">電子ビープ</option>
+    </select>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <label>電子音量</label>
+    <input id="clickVolume" type="range" min="0" max="1" step="0.05" value="0.45">
+    <span id="clickVolumeVal">0.45</span>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <button id="testClick">🔔 電子音を試す</button>
+  </div>
+
+  <div class="small">※女性音声はiPhone/Safariが提供する日本語音声を使用します。特定の人物の声を再現するものではありません。</div>
 </div>
 </div>
 
@@ -141,7 +170,44 @@ pitchEl.oninput=()=>{presetEl.value='custom';pitchVal.textContent=Number(pitchEl
 rateEl.oninput=()=>{presetEl.value='custom';rateVal.textContent=Number(rateEl.value).toFixed(2)};
 
 
+let audioCtx=null;
 let voices=[];
+
+const soundModeEl=document.getElementById('soundMode');
+const clickTypeEl=document.getElementById('clickType');
+const clickVolumeEl=document.getElementById('clickVolume');
+const clickVolumeVal=document.getElementById('clickVolumeVal');
+const testClickBtn=document.getElementById('testClick');
+
+clickVolumeEl.oninput=()=>clickVolumeVal.textContent=Number(clickVolumeEl.value).toFixed(2);
+
+function ensureAudio(){
+  if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended') audioCtx.resume();
+}
+
+function electronicClick(){
+  ensureAudio();
+  const now=audioCtx.currentTime;
+  const osc=audioCtx.createOscillator();
+  const gain=audioCtx.createGain();
+  let freq=1400, duration=0.035, type='square';
+
+  if(clickTypeEl.value==='low'){freq=700;duration=0.045;type='triangle';}
+  if(clickTypeEl.value==='beep'){freq=980;duration=0.08;type='sine';}
+
+  osc.type=type;
+  osc.frequency.setValueAtTime(freq,now);
+  if(clickTypeEl.value==='beep'){
+    osc.frequency.exponentialRampToValueAtTime(freq*0.72,now+duration);
+  }
+  gain.gain.setValueAtTime(0,now);
+  gain.gain.linearRampToValueAtTime(Number(clickVolumeEl.value),now+0.002);
+  gain.gain.exponentialRampToValueAtTime(0.001,now+duration);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(now);
+  osc.stop(now+duration+0.01);
+}
 function loadVoices(){
   voices=speechSynthesis.getVoices().filter(v=>/^ja/i.test(v.lang));
   // Enhanced / local voices are usually more natural when the device provides them.
@@ -201,16 +267,20 @@ function randomPattern(){
   return patterns[Math.floor(Math.random()*patterns.length)].slice();
 }
 function speak(){
-  if(!('speechSynthesis' in window)) return;
-  speechSynthesis.cancel();
-  const u=new SpeechSynthesisUtterance('シコ');
-  u.lang='ja-JP';
-  u.pitch=Number(pitchEl.value);
-  u.rate=Number(rateEl.value);
-  u.volume=1;
-  const v=voices[Number(voiceEl.value)];
-  if(v) u.voice=v;
-  speechSynthesis.speak(u);
+  const mode=soundModeEl.value;
+  if(mode==='click' || mode==='both') electronicClick();
+  if(mode!=='click'){
+    if(!('speechSynthesis' in window)) return;
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance('シコ');
+    u.lang='ja-JP';
+    u.pitch=Number(pitchEl.value);
+    u.rate=Number(rateEl.value);
+    u.volume=1;
+    const v=voices[Number(voiceEl.value)];
+    if(v) u.voice=v;
+    speechSynthesis.speak(u);
+  }
 }
 testVoiceBtn.onclick=()=>{
   if(!('speechSynthesis' in window)){ alert('このブラウザでは音声合成に対応していません'); return; }
@@ -224,6 +294,8 @@ testVoiceBtn.onclick=()=>{
   if(v) u.voice=v;
   speechSynthesis.speak(u);
 };
+testClickBtn.onclick=()=>electronicClick();
+
 function highlight(bar,slot){
   document.querySelectorAll('.cell').forEach(x=>x.classList.remove('hit'));
   const el=document.getElementById(`c-${bar}-${slot}`);
@@ -252,6 +324,7 @@ makeGrid();
   countEl.textContent=`次のパターンまで ${(remain/1000).toFixed(1)} 秒`;
 }
 function start(){
+  ensureAudio();
   if(running)return;
   running=true;
   step=0;patternIndex=0;sectionStart=performance.now();
@@ -266,6 +339,7 @@ function stop(){
   clearTimeout(timer);
   timer=null;
   speechSynthesis.cancel();
+  if(audioCtx && audioCtx.state==='running') audioCtx.suspend();
   document.querySelectorAll('.cell').forEach(x=>x.classList.remove('hit'));
   statusEl.textContent='停止中';
   countEl.textContent='---';
