@@ -30,50 +30,23 @@ input[type=range]{width:180px}
 .voice{font-size:14px;color:#ccc;line-height:1.6}
 select{background:#29292c;color:#fff;border:1px solid #444;border-radius:10px;padding:9px;max-width:100%}
 .small{font-size:12px;color:#888;margin-top:10px;line-height:1.5}
+
+button.sprint{font-weight:700;padding:10px 16px;border-radius:10px;}
+.sprint-row{align-items:center;}
+
+/* electronic-only mode */
+.voice-only, .voice-controls, #voice, #voicePreset, #pitch, #rate, #testVoice { display:none !important; }
 </style>
 </head>
 <body>
+<audio id="bgAudio" playsinline preload="auto" style="display:none"></audio>
+
 <div class="wrap">
 <h1>8分音符リズム「シコ」</h1>
 <div class="sub">4小節を同じリズムで約10秒間繰り返し、次の4小節へ切り替えます。</div>
 
 <div class="panel">
-  <div class="row">
-    <button id="start" class="primary">▶ スタート</button>
-    <button id="stop" class="stop">■ ストップ</button>
-  </div>
-</div>
-
-<div class="panel">
-  <div class="row">
-    <label>BPM</label><span id="bpmVal" class="value">100</span>
-    <input id="bpm" type="range" min="60" max="160" value="100">
-  </div>
-  <div class="row" style="margin-top:14px">
-    <label>パターン変更</label>
-    <select id="change">
-      <option value="10">10秒</option>
-      <option value="20">20秒</option>
-      <option value="30">30秒</option>
-    </select>
-  </div>
-</div>
-
-<div class="panel">
-  <div id="status">停止中</div>
-  <div id="count">---</div>
-  <div id="bars"></div>
-</div>
-
-<div class="panel">
-  <div class="voice">
-    <b>声を自然に調整</b><br>
-    iPhone/Safariが利用できる日本語音声から選択できます。
-  </div>
-  <div class="row" style="margin-top:12px">
-    <label>声</label>
-    <select id="voice"></select>
-  </div>
+  
   <div class="row" style="margin-top:12px">
     <label>プリセット</label>
     <select id="preset">
@@ -103,11 +76,7 @@ select{background:#29292c;color:#fff;border:1px solid #444;border-radius:10px;pa
   <div class="voice"><b>リズム音</b></div>
   <div class="row" style="margin-top:10px">
     <label>音の種類</label>
-    <select id="soundMode">
-      <option value="voice">「シコ」だけ</option>
-      <option value="click">電子音だけ</option>
-      <option value="both">「シコ」＋電子音</option>
-    </select>
+    <select id="soundMode"><option value="click" selected>電子音</option></select>
   </div>
   <div class="row" style="margin-top:10px">
     <label>電子音</label>
@@ -209,7 +178,7 @@ function electronicClick(){
   osc.stop(now+duration+0.01);
 }
 function loadVoices(){
-  voices=speechSynthesis.getVoices().filter(v=>/^ja/i.test(v.lang));
+  voices=
   // Enhanced / local voices are usually more natural when the device provides them.
   voices.sort((a,b)=>{
     const score=v=>((v.localService?3:0)+(/enhanced|premium|kyoko|siri/i.test(v.name)?2:0));
@@ -226,7 +195,7 @@ function loadVoices(){
     const o=document.createElement('option');o.textContent='日本語音声（端末の設定を確認）';voiceEl.appendChild(o);
   }
 }
-speechSynthesis.onvoiceschanged=loadVoices;
+
 loadVoices();
 
 const patterns=[
@@ -271,28 +240,28 @@ function speak(){
   if(mode==='click' || mode==='both') electronicClick();
   if(mode!=='click'){
     if(!('speechSynthesis' in window)) return;
-    speechSynthesis.cancel();
-    const u=new SpeechSynthesisUtterance('シコ');
+    
+    const u=new ;
     u.lang='ja-JP';
     u.pitch=Number(pitchEl.value);
     u.rate=Number(rateEl.value);
     u.volume=1;
     const v=voices[Number(voiceEl.value)];
     if(v) u.voice=v;
-    speechSynthesis.speak(u);
+    
   }
 }
 testVoiceBtn.onclick=()=>{
   if(!('speechSynthesis' in window)){ alert('このブラウザでは音声合成に対応していません'); return; }
-  speechSynthesis.cancel();
-  const u=new SpeechSynthesisUtterance('シコ');
+  
+  const u=new ;
   u.lang='ja-JP';
   u.pitch=Number(pitchEl.value);
   u.rate=Number(rateEl.value);
   u.volume=1;
   const v=voices[Number(voiceEl.value)];
   if(v) u.voice=v;
-  speechSynthesis.speak(u);
+  
 };
 testClickBtn.onclick=()=>electronicClick();
 
@@ -331,14 +300,18 @@ function start(){
   currentPattern=randomPattern();
   makeGrid();
   statusEl.textContent='パターン 1';
-  speechSynthesis.cancel();
+  
   tick();
 }
 function stop(){
+  sprintMode = false;
+  if (typeof sprintBtn !== "undefined") sprintBtn.textContent = "スパート開始";
+  if (typeof sprintStatus !== "undefined") sprintStatus.textContent = "通常モード";
+
   running=false;
   clearTimeout(timer);
   timer=null;
-  speechSynthesis.cancel();
+  
   if(audioCtx && audioCtx.state==='running') audioCtx.suspend();
   document.querySelectorAll('.cell').forEach(x=>x.classList.remove('hit'));
   statusEl.textContent='停止中';
@@ -348,6 +321,96 @@ startBtn.onclick=start;
 stopBtn.onclick=stop;
 changeEl.onchange=()=>{sectionMs=Number(changeEl.value)*1000};
 makeGrid();
+
+// Electronic-only playback. Uses Web Audio for precise timing and an <audio>
+// media element as a keep-alive/Media Session anchor on iPhone Safari.
+const bgAudio = document.getElementById("bgAudio");
+
+function setupMediaSession() {
+  if (!("mediaSession" in navigator)) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: "SIKO Rhythm",
+      artist: "Rhythm Generator",
+      album: "8th-note rhythm"
+    });
+    navigator.mediaSession.setActionHandler("play", () => { if (!running) start(); });
+    navigator.mediaSession.setActionHandler("pause", () => { if (running) stop(); });
+  } catch(e) {}
+}
+
+function makeKeepAliveAudio() {
+  // A tiny silent WAV generated in-memory. It lets Safari treat the page
+  // as an active media player; rhythm clicks remain Web Audio scheduled.
+  const rate = 8000, seconds = 1;
+  const samples = rate * seconds;
+  const buf = new ArrayBuffer(44 + samples * 2);
+  const dv = new DataView(buf);
+  const put = (o, s) => { for(let i=0;i<s.length;i++) dv.setUint8(o+i,s.charCodeAt(i)); };
+  put(0,"RIFF"); dv.setUint32(4,36+samples*2,true); put(8,"WAVE");
+  put(12,"fmt "); dv.setUint32(16,16,true); dv.setUint16(20,1,true);
+  dv.setUint16(22,1,true); dv.setUint32(24,rate,true); dv.setUint32(28,rate*2,true);
+  dv.setUint16(32,2,true); dv.setUint16(34,16,true); put(36,"data");
+  dv.setUint32(40,samples*2,true);
+  // Silence
+  for(let i=0;i<samples;i++) dv.setInt16(44+i*2,0,true);
+  let binary = "";
+  const bytes = new Uint8Array(buf);
+  for(let i=0;i<bytes.length;i++) binary += String.fromCharCode(bytes[i]);
+  return "data:audio/wav;base64," + btoa(binary);
+}
+
+const keepAliveSrc = makeKeepAliveAudio();
+
+async function startBackgroundMediaAnchor() {
+  try {
+    bgAudio.loop = true;
+    bgAudio.src = keepAliveSrc;
+    await bgAudio.play();
+    setupMediaSession();
+  } catch(e) {
+    // iOS may reject simultaneous media; main Web Audio still works foreground.
+  }
+}
+
+function stopBackgroundMediaAnchor() {
+  try {
+    bgAudio.pause();
+    bgAudio.currentTime = 0;
+  } catch(e) {}
+}
+
+sprintBtn.addEventListener("click", async () => {
+  if (sprintMode) {
+    sprintMode = false;
+    sprintBtn.textContent = "スパート開始";
+    sprintStatus.textContent = "通常モード";
+    bpmVal.textContent = bpmEl.value;
+  } else {
+    sprintMode = true;
+    sprintStartTime = performance.now();
+    bpmVal.textContent = "150";
+    sprintBtn.textContent = "スパート停止";
+    sprintStatus.textContent = "150 BPM → 10秒ごとに+10 BPM";
+    if (!running) await start();
+  }
+});
+
+bpmEl.addEventListener("input", () => {
+  if (!sprintMode) bpmVal.textContent = bpmEl.value;
+});
+
+
 </script>
+
+<div class="row">
+  <label>BPM <input id="bpm" type="range" min="60" max="150" value="100" step="1"></label>
+  <span id="bpmVal">100</span>
+</div>
+<div class="row sprint-row">
+  <button id="sprintBtn" class="sprint">スパート開始</button>
+  <span id="sprintStatus">通常モード</span>
+</div>
+
 </body>
 </html>
