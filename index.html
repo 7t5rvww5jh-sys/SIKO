@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>8分音符リズム「シコ」</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#111;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif}
+.wrap{max-width:720px;margin:auto;padding:20px 16px 32px}
+h1{font-size:24px;margin:4px 0 8px}
+.sub{color:#aaa;font-size:13px;margin-bottom:18px}
+.panel{background:#1d1d1f;border-radius:18px;padding:16px;margin-bottom:14px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+button{border:0;border-radius:12px;padding:12px 16px;font-size:16px;font-weight:700;background:#eee;color:#111}
+button.primary{background:#39d98a;color:#06150d}
+button.stop{background:#ff5d5d;color:#fff}
+label{font-size:14px;color:#bbb}
+input[type=range]{width:180px}
+.value{font-weight:700;font-size:18px}
+#status{font-size:18px;font-weight:700}
+#count{font-size:13px;color:#aaa;margin-top:4px}
+.grid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px;margin-top:12px}
+.cell{height:58px;border-radius:10px;background:#29292c;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.cell .num{font-size:11px;color:#888}
+.cell.on{background:#4a4a4e}
+.cell.hit{background:#39d98a;color:#06150d;transform:scale(1.04)}
+.cell.hit .num{color:#164c31}
+.barTitle{margin-top:12px;color:#aaa;font-size:12px}
+.voice{font-size:14px;color:#ccc;line-height:1.6}
+select{background:#29292c;color:#fff;border:1px solid #444;border-radius:10px;padding:9px;max-width:100%}
+.small{font-size:12px;color:#888;margin-top:10px;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>8分音符リズム「シコ」</h1>
+<div class="sub">4小節を同じリズムで約10秒間繰り返し、次の4小節へ切り替えます。</div>
+
+<div class="panel">
+  <div class="row">
+    <button id="start" class="primary">▶ スタート</button>
+    <button id="stop" class="stop">■ ストップ</button>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="row">
+    <label>BPM</label><span id="bpmVal" class="value">100</span>
+    <input id="bpm" type="range" min="60" max="160" value="100">
+  </div>
+  <div class="row" style="margin-top:14px">
+    <label>パターン変更</label>
+    <select id="change">
+      <option value="10">10秒</option>
+      <option value="20">20秒</option>
+      <option value="30">30秒</option>
+    </select>
+  </div>
+</div>
+
+<div class="panel">
+  <div id="status">停止中</div>
+  <div id="count">---</div>
+  <div id="bars"></div>
+</div>
+
+<div class="panel">
+  <div class="voice">
+    <b>音声：</b>「シコ」<br>
+    iPhoneの音声合成から日本語の声を選択して発音します。
+  </div>
+  <div class="row" style="margin-top:12px">
+    <label>声</label>
+    <select id="voice"></select>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <label>音程</label>
+    <input id="pitch" type="range" min="0.7" max="1.4" step="0.05" value="1.0">
+    <span id="pitchVal">1.00</span>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <label>速度</label>
+    <input id="rate" type="range" min="0.7" max="1.3" step="0.05" value="1.0">
+    <span id="rateVal">1.00</span>
+  </div>
+  <div class="small">※「シコ」の声は端末・ブラウザが提供する日本語音声に依存します。</div>
+</div>
+</div>
+
+<script>
+const bpmEl=document.getElementById('bpm');
+const bpmVal=document.getElementById('bpmVal');
+const changeEl=document.getElementById('change');
+const startBtn=document.getElementById('start');
+const stopBtn=document.getElementById('stop');
+const statusEl=document.getElementById('status');
+const countEl=document.getElementById('count');
+const barsEl=document.getElementById('bars');
+const voiceEl=document.getElementById('voice');
+const pitchEl=document.getElementById('pitch');
+const rateEl=document.getElementById('rate');
+const pitchVal=document.getElementById('pitchVal');
+const rateVal=document.getElementById('rateVal');
+
+bpmEl.oninput=()=>bpmVal.textContent=bpmEl.value;
+pitchEl.oninput=()=>pitchVal.textContent=Number(pitchEl.value).toFixed(2);
+rateEl.oninput=()=>rateVal.textContent=Number(rateEl.value).toFixed(2);
+
+let voices=[];
+function loadVoices(){
+  voices=speechSynthesis.getVoices().filter(v=>/^ja/i.test(v.lang));
+  voiceEl.innerHTML='';
+  voices.forEach((v,i)=>{
+    const o=document.createElement('option');
+    o.value=i;
+    o.textContent=v.name+(v.localService?'（端末）':'');
+    voiceEl.appendChild(o);
+  });
+  if(!voices.length){
+    const o=document.createElement('option');o.textContent='日本語音声（端末の設定を確認）';voiceEl.appendChild(o);
+  }
+}
+speechSynthesis.onvoiceschanged=loadVoices;
+loadVoices();
+
+const patterns=[
+  [1,0,1,0,1,0,1,0],
+  [1,0,0,1,1,0,0,1],
+  [1,0,1,1,0,1,1,0],
+  [1,1,0,1,1,0,1,0],
+  [1,0,0,1,0,1,0,1],
+  [1,1,0,0,1,1,0,1],
+  [1,0,1,0,0,1,1,0],
+  [1,0,0,1,1,0,1,1]
+];
+
+let running=false, timer=null, step=0, patternIndex=0, sectionStart=0, sectionMs=10000;
+let currentPattern=patterns[0];
+
+function makeGrid(){
+  barsEl.innerHTML='';
+  for(let b=0;b<4;b++){
+    const title=document.createElement('div');
+    title.className='barTitle';
+    title.textContent=`${b+1}小節`;
+    barsEl.appendChild(title);
+    const grid=document.createElement('div');
+    grid.className='grid';
+    for(let s=0;s<8;s++){
+      const c=document.createElement('div');
+      c.className='cell';
+      c.id=`c-${b}-${s}`;
+      c.innerHTML=`<span class="num">${[1,'&',2,'&',3,'&',4,'&'][s]}</span><span>${currentPattern[s]?'●':'·'}</span>`;
+      grid.appendChild(c);
+    }
+    barsEl.appendChild(grid);
+  }
+}
+function randomPattern(){
+  // 8分音符の音楽的なまとまりを維持したパターン
+  return patterns[Math.floor(Math.random()*patterns.length)].slice();
+}
+function speak(){
+  if(!('speechSynthesis' in window)) return;
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance('シコ');
+  u.lang='ja-JP';
+  u.pitch=Number(pitchEl.value);
+  u.rate=Number(rateEl.value);
+  u.volume=1;
+  const v=voices[Number(voiceEl.value)];
+  if(v) u.voice=v;
+  speechSynthesis.speak(u);
+}
+function highlight(bar,slot){
+  document.querySelectorAll('.cell').forEach(x=>x.classList.remove('hit'));
+  const el=document.getElementById(`c-${bar}-${slot}`);
+  if(el) el.classList.add('hit');
+}
+function tick(){
+  if(!running)return;
+  const now=performance.now();
+  if(now-sectionStart>=sectionMs){
+    patternIndex++;
+    currentPattern=randomPattern();
+    sectionStart=now;
+    makeGrid();
+    statusEl.textContent=`パターン ${patternIndex+1}`;
+  }
+  const pos=step%32;
+  const bar=Math.floor(pos/8);
+  const slot=pos%8;
+  highlight(bar,slot);
+  if(currentPattern[slot]) speak();
+  const beatMs=60000/Number(bpmEl.value)/2;
+  step++;
+  timer=setTimeout(tick,beatMs);
+  const remain=Math.max(0,sectionMs-(now-sectionStart));
+  countEl.textContent=`次のパターンまで ${(remain/1000).toFixed(1)} 秒`;
+}
+function start(){
+  if(running)return;
+  running=true;
+  step=0;patternIndex=0;sectionStart=performance.now();
+  currentPattern=randomPattern();
+  makeGrid();
+  statusEl.textContent='パターン 1';
+  speechSynthesis.cancel();
+  tick();
+}
+function stop(){
+  running=false;
+  clearTimeout(timer);
+  timer=null;
+  speechSynthesis.cancel();
+  document.querySelectorAll('.cell').forEach(x=>x.classList.remove('hit'));
+  statusEl.textContent='停止中';
+  countEl.textContent='---';
+}
+startBtn.onclick=start;
+stopBtn.onclick=stop;
+changeEl.onchange=()=>{sectionMs=Number(changeEl.value)*1000};
+makeGrid();
+</script>
+</body>
+</html>
