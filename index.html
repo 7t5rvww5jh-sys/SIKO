@@ -28,30 +28,16 @@
   .mode{display:flex;gap:8px}
   .mode button{flex:1}
   .mode button.active{background:#fff;color:#111}
-  .rhythm-card{overflow:hidden}
-  .count-row{
-    display:grid;grid-template-columns:repeat(8,1fr);gap:5px;
-    margin-top:10px;color:#777;font-size:12px;text-align:center;font-weight:700
-  }
-  .rhythm-track{
-    display:grid;grid-template-columns:repeat(8,1fr);gap:5px;margin-top:7px
+  .pattern{
+    display:grid;grid-template-columns:repeat(8,1fr);gap:7px;margin-top:14px
   }
   .beat{
-    height:66px;border-radius:14px;background:#29292b;border:2px solid #3a3a3c;
-    display:flex;align-items:center;justify-content:center;
-    font-weight:900;color:#555;font-size:23px;transition:transform .08s,background .08s,border-color .08s;
+    height:48px;border-radius:10px;background:#2d2d2f;display:flex;align-items:center;justify-content:center;
+    font-weight:800;color:#aaa;font-size:13px
   }
-  .beat.on{background:#e8e8e8;color:#111;border-color:#fff}
-  .beat.current{
-    background:#fff;color:#000;border-color:#fff;
-    transform:scale(1.06);box-shadow:0 0 0 3px #777;
-  }
-  .beat.next{border-color:#aaa;color:#aaa}
-  .beat.rest{font-size:16px}
-  .beat.accent{font-size:27px}
-  .next-label{text-align:center;color:#aaa;font-size:13px;margin-top:12px;min-height:18px}
-  .progress{height:5px;background:#2d2d2f;border-radius:10px;margin-top:9px;overflow:hidden}
-  #progressBar{height:100%;width:0;background:#fff;transition:width .05s linear}
+  .beat.on{background:#fff;color:#111}
+  .beat.current{outline:3px solid #777;transform:translateY(-2px)}
+  .beat.accent{font-size:15px}
   .status{text-align:center;color:#aaa;font-size:14px;margin-top:13px}
   .boostInfo{text-align:center;color:#ffcf66;font-size:13px;margin-top:9px;min-height:18px}
   label{display:block;font-size:14px;color:#bbb;margin-bottom:8px}
@@ -94,15 +80,9 @@
     <div class="boostInfo" id="boostInfo"></div>
   </div>
 
-  <div class="card rhythm-card">
-    <label>リズム</label>
-    <div class="count-row">
-      <span>1</span><span>&</span><span>2</span><span>&</span>
-      <span>3</span><span>&</span><span>4</span><span>&</span>
-    </div>
-    <div class="rhythm-track" id="pattern"></div>
-    <div class="next-label" id="nextLabel">—</div>
-    <div class="progress"><div id="progressBar"></div></div>
+  <div class="card">
+    <label>8分音符リズム</label>
+    <div class="pattern" id="pattern"></div>
     <div class="status" id="status">停止中</div>
   </div>
 
@@ -165,19 +145,16 @@ function renderPattern(){
   box.innerHTML="";
   pattern.forEach((on,i)=>{
     const d=document.createElement("div");
-    d.className="beat"+(on?" on":" rest")+(i===0?" accent":"");
+    d.className="beat"+(on?" on":"")+(i===0?" accent":"");
     d.id="beat"+i;
-    d.textContent=on ? "●" : "○";
-    d.setAttribute("aria-label", on ? "音あり" : "休符");
+    d.textContent=on ? (i%2===0 ? "●" : "・") : "—";
     box.appendChild(d);
   });
 }
 
 function highlight(){
   for(let i=0;i<8;i++){
-    const el=document.getElementById("beat"+i);
-    el.classList.toggle("current",i===step);
-    el.classList.toggle("next",i===((step+1)%8));
+    document.getElementById("beat"+i).classList.toggle("current",i===step);
   }
 }
 
@@ -188,38 +165,19 @@ function schedule(){
   const interval=60/bpm/2;
 
   while(nextTime < now + 0.12){
-    const s=step;
-    const on=pattern[s]===1;
+    const on=pattern[step]===1;
 
-    // 音はAudioContextの正確な時刻で鳴らす
     if(on){
-      beep(nextTime, s===0 && document.getElementById("accentToggle").checked);
-    }
-
-    // 音がある/ないに関係なく、8分音符ごとに表示位置を進める
-    const delay=Math.max(0,(nextTime-audioCtx.currentTime)*1000);
-    setTimeout(()=>{
-      if(!playing) return;
-
-      for(let i=0;i<8;i++){
-        const el=document.getElementById("beat"+i);
-        if(el){
-          el.classList.toggle("current",i===s);
-          el.classList.toggle("next",i===((s+1)%8));
+      beep(nextTime, step===0 && document.getElementById("accentToggle").checked);
+      const s=step;
+      setTimeout(()=>{
+        if(playing){
+          for(let i=0;i<8;i++) document.getElementById("beat"+i).classList.toggle("current",i===s);
+          document.getElementById("status").textContent =
+            "現在：8分音符 " + (s+1) + " / 8";
         }
-      }
-
-      const countNames=["1","&","2","&","3","&","4","&"];
-      document.getElementById("status").textContent =
-        "現在： " + countNames[s] + (on ? "  ●" : "  ○");
-
-      const next=(s+1)%8;
-      document.getElementById("nextLabel").textContent =
-        "次：" + countNames[next] + (pattern[next] ? "  ●" : "  ○");
-
-      document.getElementById("progressBar").style.width =
-        (((s+1)/8)*100) + "%";
-    },delay);
+      },Math.max(0,(nextTime-audioCtx.currentTime)*1000));
+    }
 
     step=(step+1)%8;
     nextTime += interval;
@@ -235,8 +193,6 @@ function togglePlay(){
   step=0;
   boostElapsed=0;
   nextTime=audioCtx.currentTime+0.03;
-  document.getElementById("progressBar").style.width="0%";
-  document.getElementById("nextLabel").textContent="次：1  ●";
   document.getElementById("startBtn").textContent="PAUSE";
   document.getElementById("status").textContent="再生中";
   schedule();
@@ -263,12 +219,8 @@ function stop(){
   boostElapsed=0;
   document.getElementById("startBtn").textContent="START";
   document.getElementById("status").textContent="停止中";
-  document.getElementById("nextLabel").textContent="—";
-  document.getElementById("progressBar").style.width="0%";
   document.getElementById("boostInfo").textContent="";
-  for(let i=0;i<8;i++){
-    document.getElementById("beat"+i).classList.remove("current","next");
-  }
+  for(let i=0;i<8;i++) document.getElementById("beat"+i).classList.remove("current");
 }
 
 function changeBpm(n){
