@@ -188,26 +188,38 @@ function schedule(){
   const interval=60/bpm/2;
 
   while(nextTime < now + 0.12){
-    const on=pattern[step]===1;
+    const s=step;
+    const on=pattern[s]===1;
 
+    // 音はAudioContextの正確な時刻で鳴らす
     if(on){
-      beep(nextTime, step===0 && document.getElementById("accentToggle").checked);
-      const s=step;
-      setTimeout(()=>{
-        if(playing){
-          for(let i=0;i<8;i++){
-            const el=document.getElementById("beat"+i);
-            el.classList.toggle("current",i===s);
-            el.classList.toggle("next",i===((s+1)%8));
-          }
-          const countNames=["1","&","2","&","3","&","4","&"];
-          document.getElementById("status").textContent =
-            "現在： " + countNames[s];
-          document.getElementById("nextLabel").textContent =
-            "次：" + countNames[(s+1)%8] + (pattern[(s+1)%8] ? " ●" : " ○");
-        }
-      },Math.max(0,(nextTime-audioCtx.currentTime)*1000));
+      beep(nextTime, s===0 && document.getElementById("accentToggle").checked);
     }
+
+    // 音がある/ないに関係なく、8分音符ごとに表示位置を進める
+    const delay=Math.max(0,(nextTime-audioCtx.currentTime)*1000);
+    setTimeout(()=>{
+      if(!playing) return;
+
+      for(let i=0;i<8;i++){
+        const el=document.getElementById("beat"+i);
+        if(el){
+          el.classList.toggle("current",i===s);
+          el.classList.toggle("next",i===((s+1)%8));
+        }
+      }
+
+      const countNames=["1","&","2","&","3","&","4","&"];
+      document.getElementById("status").textContent =
+        "現在： " + countNames[s] + (on ? "  ●" : "  ○");
+
+      const next=(s+1)%8;
+      document.getElementById("nextLabel").textContent =
+        "次：" + countNames[next] + (pattern[next] ? "  ●" : "  ○");
+
+      document.getElementById("progressBar").style.width =
+        (((s+1)/8)*100) + "%";
+    },delay);
 
     step=(step+1)%8;
     nextTime += interval;
@@ -223,6 +235,8 @@ function togglePlay(){
   step=0;
   boostElapsed=0;
   nextTime=audioCtx.currentTime+0.03;
+  document.getElementById("progressBar").style.width="0%";
+  document.getElementById("nextLabel").textContent="次：1  ●";
   document.getElementById("startBtn").textContent="PAUSE";
   document.getElementById("status").textContent="再生中";
   schedule();
@@ -252,7 +266,9 @@ function stop(){
   document.getElementById("nextLabel").textContent="—";
   document.getElementById("progressBar").style.width="0%";
   document.getElementById("boostInfo").textContent="";
-  for(let i=0;i<8;i++) document.getElementById("beat"+i).classList.remove("current");
+  for(let i=0;i<8;i++){
+    document.getElementById("beat"+i).classList.remove("current","next");
+  }
 }
 
 function changeBpm(n){
