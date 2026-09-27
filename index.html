@@ -134,16 +134,25 @@ function triggerFlash(accent){
   flashBig = accent;
 }
 
-function drawVisualizer(){
-  const canvas = document.getElementById("vis");
-  const ctx = canvas.getContext("2d");
+const visCanvas = document.getElementById("vis");
+const visCtx = visCanvas.getContext("2d");
+let visW = 0, visH = 0; // cached CSS size, updated only on real resize
+
+function resizeVisCanvas(){
   const dpr = window.devicePixelRatio || 1;
-  const cssW = canvas.clientWidth, cssH = canvas.clientHeight;
-  if(canvas.width !== Math.round(cssW*dpr) || canvas.height !== Math.round(cssH*dpr)){
-    canvas.width = Math.round(cssW*dpr);
-    canvas.height = Math.round(cssH*dpr);
-  }
-  ctx.setTransform(dpr,0,0,dpr,0,0);
+  visW = visCanvas.clientWidth;
+  visH = visCanvas.clientHeight;
+  visCanvas.width = Math.round(visW*dpr);
+  visCanvas.height = Math.round(visH*dpr);
+  visCtx.setTransform(dpr,0,0,dpr,0,0);
+}
+new ResizeObserver(resizeVisCanvas).observe(visCanvas);
+resizeVisCanvas();
+
+function drawVisualizer(){
+  const ctx = visCtx;
+  const cssW = visW, cssH = visH;
+  if(cssW===0||cssH===0) return;
   ctx.clearRect(0,0,cssW,cssH);
 
   const judgeX = cssW*0.16;
