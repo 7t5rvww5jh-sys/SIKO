@@ -67,24 +67,37 @@ select{background:#29292c;color:#fff;border:1px solid #444;border-radius:10px;pa
 
 <div class="panel">
   <div class="voice">
-    <b>音声：</b>「シコ」<br>
-    iPhoneの音声合成から日本語の声を選択して発音します。
+    <b>声を自然に調整</b><br>
+    iPhone/Safariが利用できる日本語音声から選択できます。
   </div>
   <div class="row" style="margin-top:12px">
     <label>声</label>
     <select id="voice"></select>
   </div>
   <div class="row" style="margin-top:12px">
+    <label>プリセット</label>
+    <select id="preset">
+      <option value="natural">自然な女性寄り</option>
+      <option value="soft">やわらかめ</option>
+      <option value="bright">明るめ</option>
+      <option value="low">落ち着いた声</option>
+      <option value="custom">手動</option>
+    </select>
+  </div>
+  <div class="row" style="margin-top:12px">
     <label>音程</label>
-    <input id="pitch" type="range" min="0.7" max="1.4" step="0.05" value="1.0">
-    <span id="pitchVal">1.00</span>
+    <input id="pitch" type="range" min="0.7" max="1.5" step="0.05" value="1.12">
+    <span id="pitchVal">1.12</span>
   </div>
   <div class="row" style="margin-top:12px">
     <label>速度</label>
-    <input id="rate" type="range" min="0.7" max="1.3" step="0.05" value="1.0">
-    <span id="rateVal">1.00</span>
+    <input id="rate" type="range" min="0.7" max="1.5" step="0.05" value="1.05">
+    <span id="rateVal">1.05</span>
   </div>
-  <div class="small">※「シコ」の声は端末・ブラウザが提供する日本語音声に依存します。</div>
+  <div class="row" style="margin-top:12px">
+    <button id="testVoice">🔊 声を試す</button>
+  </div>
+  <div class="small">※女性音声の有無・声質はiPhoneに入っている音声によって異なります。「女性寄り」は音程・速度を自然な範囲で調整するプリセットです。</div>
 </div>
 </div>
 
@@ -105,11 +118,37 @@ const rateVal=document.getElementById('rateVal');
 
 bpmEl.oninput=()=>bpmVal.textContent=bpmEl.value;
 pitchEl.oninput=()=>pitchVal.textContent=Number(pitchEl.value).toFixed(2);
-rateEl.oninput=()=>rateVal.textContent=Number(rateEl.value).toFixed(2);
+
+const presetEl=document.getElementById('preset');
+const testVoiceBtn=document.getElementById('testVoice');
+
+const presets={
+  natural:{pitch:1.12,rate:1.05},
+  soft:{pitch:1.18,rate:0.98},
+  bright:{pitch:1.25,rate:1.08},
+  low:{pitch:0.98,rate:0.98}
+};
+
+function applyPreset(name){
+  if(!presets[name]) return;
+  pitchEl.value=presets[name].pitch;
+  rateEl.value=presets[name].rate;
+  pitchVal.textContent=Number(pitchEl.value).toFixed(2);
+  rateVal.textContent=Number(rateEl.value).toFixed(2);
+}
+presetEl.onchange=()=>applyPreset(presetEl.value);
+pitchEl.oninput=()=>{presetEl.value='custom';pitchVal.textContent=Number(pitchEl.value).toFixed(2)};
+rateEl.oninput=()=>{presetEl.value='custom';rateVal.textContent=Number(rateEl.value).toFixed(2)};
+
 
 let voices=[];
 function loadVoices(){
   voices=speechSynthesis.getVoices().filter(v=>/^ja/i.test(v.lang));
+  // Enhanced / local voices are usually more natural when the device provides them.
+  voices.sort((a,b)=>{
+    const score=v=>((v.localService?3:0)+(/enhanced|premium|kyoko|siri/i.test(v.name)?2:0));
+    return score(b)-score(a);
+  });
   voiceEl.innerHTML='';
   voices.forEach((v,i)=>{
     const o=document.createElement('option');
@@ -173,6 +212,18 @@ function speak(){
   if(v) u.voice=v;
   speechSynthesis.speak(u);
 }
+testVoiceBtn.onclick=()=>{
+  if(!('speechSynthesis' in window)){ alert('このブラウザでは音声合成に対応していません'); return; }
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance('シコ');
+  u.lang='ja-JP';
+  u.pitch=Number(pitchEl.value);
+  u.rate=Number(rateEl.value);
+  u.volume=1;
+  const v=voices[Number(voiceEl.value)];
+  if(v) u.voice=v;
+  speechSynthesis.speak(u);
+};
 function highlight(bar,slot){
   document.querySelectorAll('.cell').forEach(x=>x.classList.remove('hit'));
   const el=document.getElementById(`c-${bar}-${slot}`);
@@ -185,7 +236,8 @@ function tick(){
     patternIndex++;
     currentPattern=randomPattern();
     sectionStart=now;
-    makeGrid();
+    applyPreset('natural');
+makeGrid();
     statusEl.textContent=`パターン ${patternIndex+1}`;
   }
   const pos=step%32;
