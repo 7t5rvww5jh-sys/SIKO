@@ -198,12 +198,14 @@ function togglePlay(){
   schedule();
 
   if(mode==="boost") startBoost();
+  if(mode==="normal") startNormal();
 }
 
 function pause(){
   playing=false;
   clearTimeout(timer);
   clearInterval(boostTimer);
+  clearInterval(normalTimer);
   document.getElementById("startBtn").textContent="START";
   document.getElementById("status").textContent="一時停止";
 }
@@ -212,6 +214,7 @@ function stop(){
   playing=false;
   clearTimeout(timer);
   clearInterval(boostTimer);
+  clearInterval(normalTimer);
   step=0;
   boostElapsed=0;
   document.getElementById("startBtn").textContent="START";
@@ -231,6 +234,35 @@ document.getElementById("bpm").addEventListener("input",e=>{
 });
 
 let boostTimer=null;
+let normalTimer=null;
+const patterns = [
+  [1,0,1,0,1,0,1,0],
+  [1,0,1,1,1,0,1,0],
+  [1,1,1,0,1,1,1,0],
+  [1,0,1,0,1,1,1,1],
+  [1,1,0,1,1,0,1,0],
+  [1,0,1,1,0,1,1,0],
+  [1,1,1,0,1,0,1,1],
+  [1,0,1,0,1,1,0,1]
+];
+function startNormal(){
+  clearInterval(normalTimer);
+  if(mode !== "normal" || !playing) return;
+  normalTimer=setInterval(()=>{
+    if(!playing || mode !== "normal") return;
+    // 15秒ごとに60〜180 BPMからランダムに選択
+    bpm=Math.floor(Math.random()*121)+60;
+    // 15秒ごとにリズムパターンも変更
+    let next=patterns[Math.floor(Math.random()*patterns.length)];
+    while(next.join(',')===pattern.join(',')){
+      next=patterns[Math.floor(Math.random()*patterns.length)];
+    }
+    pattern.splice(0,pattern.length,...next);
+    renderPattern();
+    updateUI();
+    document.getElementById("status").textContent="通常モード：リズム・BPM変更";
+  },15000);
+}
 function startBoost(){
   clearInterval(boostTimer);
   boostTimer=setInterval(()=>{
@@ -239,12 +271,20 @@ function startBoost(){
     // 10秒ごとに +10 BPM。200を超えても継続。
     if(boostElapsed%10===0){
       bpm+=10;
+
+      // 10秒ごとにリズムもランダム変更
+      let next=patterns[Math.floor(Math.random()*patterns.length)];
+      while(next.join(',')===pattern.join(',')){
+        next=patterns[Math.floor(Math.random()*patterns.length)];
+      }
+      pattern.splice(0,pattern.length,...next);
+      renderPattern();
+
       document.getElementById("bpmValue").textContent=bpm;
       document.getElementById("bpm").value=Math.min(200,bpm);
-      document.getElementById("boostInfo").textContent="スパート：次の加速まで "+(10-(boostElapsed%10))+" 秒";
-    }else{
-      document.getElementById("boostInfo").textContent="スパート：次の加速まで "+(10-(boostElapsed%10))+" 秒";
+      document.getElementById("status").textContent="スパート：リズム・BPM変更";
     }
+    document.getElementById("boostInfo").textContent="スパート：次の変更まで "+(10-(boostElapsed%10))+" 秒";
   },1000);
 }
 
@@ -252,9 +292,14 @@ function setMode(m){
   mode=m;
   document.getElementById("normalBtn").classList.toggle("active",m==="normal");
   document.getElementById("boostBtn").classList.toggle("active",m==="boost");
+
+  clearInterval(boostTimer);
+  clearInterval(normalTimer);
+
   if(m==="normal"){
-    clearInterval(boostTimer);
+    boostElapsed=0;
     document.getElementById("boostInfo").textContent="";
+    if(playing) startNormal();
   }else if(playing){
     boostElapsed=0;
     startBoost();
